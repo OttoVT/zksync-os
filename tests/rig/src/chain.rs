@@ -164,7 +164,13 @@ impl<const RANDOMIZED_TREE: bool> Chain<RANDOMIZED_TREE> {
             None
         };
 
-        let output = zksync_os_runner::run(path, diagnostics_config, 1 << 36, copy_source);
+        let cycle_limit = 1 << 31;
+        info!("==========================================");
+        info!("Starting ZK RISC-V simulation (lib.rs path)");
+        info!("Cycle limit: {}", cycle_limit);
+        info!("==========================================");
+
+        let output = zksync_os_runner::run(path, diagnostics_config, cycle_limit, copy_source);
 
         // We return 0s in case of failure.
         assert_ne!(output, [0u32; 8]);
@@ -188,7 +194,13 @@ impl<const RANDOMIZED_TREE: bool> Chain<RANDOMIZED_TREE> {
         let image = get_zksync_os_img_path(app);
         let text = get_zksync_os_text_path(app);
 
-        let output = zksync_os_runner::run_transpiler::run(image, text, None, 1 << 36, oracle);
+        let cycle_limit = 1 << 31;
+        println!("==========================================");
+        println!("Starting ZK RISC-V simulation (transpiler path)");
+        println!("Cycle limit: {}", cycle_limit);
+        println!("==========================================");
+
+        let output = zksync_os_runner::run_transpiler::run(image, text, None, cycle_limit, oracle);
 
         // We return 0s in case of failure.
         assert_ne!(output, [0u32; 8]);
@@ -384,11 +396,17 @@ impl<const RANDOMIZED_TREE: bool> Chain<RANDOMIZED_TREE> {
                 diagnostics_cfg
             });
 
+            let cycle_limit = 1 << 31;
+            info!("==========================================");
+            info!("Starting ZK RISC-V simulation");
+            info!("Cycle limit: {}", cycle_limit);
+            info!("==========================================");
+
             let now = std::time::Instant::now();
             let (proof_output, block_effective) = zksync_os_runner::run_and_get_effective_cycles(
                 get_zksync_os_img_path(&app),
                 diagnostics_config,
-                1 << 36,
+                cycle_limit,
                 copy_source,
             );
             info!(
@@ -646,13 +664,13 @@ impl<const RANDOMIZED_TREE: bool> Chain<RANDOMIZED_TREE> {
             oracle.add_external_processor(UARTPrintReponsder);
             oracle.add_external_processor(callable_oracles::arithmetic::ArithmeticQuery::default());
             oracle.add_external_processor(callable_oracles::field_hints::FieldOpsQuery::default());
-            let _ = Self::run_batch_via_transpiler::<false, 5>(oracle, &app);
-            // let result = Self::run_batch_generate_witness::<true>(oracle, &app);
-            // let mut file = File::create(&path).expect("should create file");
-            // let witness: Vec<u8> = result.iter().flat_map(|x| x.to_be_bytes()).collect();
-            // let hex = hex::encode(witness);
-            // file.write_all(hex.as_bytes())
-            //     .expect("should write to file");
+            //let _ = Self::run_batch_via_transpiler::<false, 5>(oracle, &app);
+            let result = Self::run_batch_generate_witness::<false>(oracle, &app);
+            let mut file = File::create(&path).expect("should create file");
+            let witness: Vec<u8> = result.iter().flat_map(|x| x.to_be_bytes()).collect();
+            let hex = hex::encode(witness);
+            file.write_all(hex.as_bytes())
+                .expect("should write to file");
         }
 
         result_keeper

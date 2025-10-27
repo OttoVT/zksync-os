@@ -109,26 +109,61 @@ pub fn run_and_get_effective_cycles<const ROM_BOUND_SECOND_WORD_BITS: usize>(
 
     type CountersT = DelegationsAndFamiliesCounters;
     println!("ZK RISC-V simulator is starting");
+    println!("Requested cycles limit transplier: {}", cycles);
+    println!("Loading binary from {:?}", img_path);
+    println!("Loading text section from {:?}", text_section_path);
 
     let (_, binary) = read_binary(&img_path);
     let (_, text) = read_binary(&text_section_path);
 
+    println!("Decoding instructions...");
     let instructions: Vec<Instruction> = text
         .into_iter()
         .map(|el| decode::<FullUnsignedMachineDecoderConfig>(el))
         .collect();
     let tape = SimpleTape::new(&instructions);
+
+    println!("Creating RAM with 1GB capacity (1 << 30 = {} bytes)...", 1 << 30);
     let mut ram =
         RamWithRomRegion::<ROM_BOUND_SECOND_WORD_BITS>::from_rom_content(&binary, 1 << 30);
+
     let period = 1 << 20;
     let num_snapshots = cycles.div_ceil(period);
     let cycles_bound = period * num_snapshots;
 
+    // Estimate memory usage based on observed allocation pattern
+    // The SimpleSnapshotter appears to allocate ~12 bytes per cycle
+    let estimated_bytes_per_cycle = 12;
+    let estimated_total_bytes = cycles_bound as u128 * estimated_bytes_per_cycle as u128;
+    let estimated_gib = estimated_total_bytes as f64 / (1024.0_f64.powi(3));
+
+    println!(
+        "Running for up to {} cycles ({} snapshots of {} cycles each)",
+        cycles_bound, num_snapshots, period
+    );
+    println!(
+        "Estimated snapshotter memory: {:.2} GiB ({} bytes)",
+        estimated_gib, estimated_total_bytes
+    );
+
+    if estimated_gib > 32.0 {
+        eprintln!("⚠️  WARNING: Very large memory allocation required!");
+        eprintln!("⚠️  Requested cycles: {}", cycles);
+        eprintln!("⚠️  Adjusted cycles_bound: {}", cycles_bound);
+        eprintln!("⚠️  Estimated memory: {:.2} GiB ({} bytes)", estimated_gib, estimated_total_bytes);
+        eprintln!("⚠️  This will likely cause out-of-memory errors.");
+        eprintln!("⚠️  Consider reducing the cycle limit (currently 1 << {}).",
+            (cycles as f64).log2() as u32);
+    }
+
     let mut state = State::initial_with_counters(CountersT::default());
 
+    println!("Creating snapshotter...");
+    println!("Cycles bound: {}", cycles_bound);
+    println!("Period: {}", period);
     let mut snapshotter: SimpleSnapshotter<CountersT, ROM_BOUND_SECOND_WORD_BITS> =
         SimpleSnapshotter::new_with_cycle_limit(cycles_bound, period, state);
-
+    println!("Snapshotter created.");
     let now = std::time::Instant::now();
     VM::<CountersT>::run_basic_unrolled::<
         SimpleSnapshotter<CountersT, ROM_BOUND_SECOND_WORD_BITS>,

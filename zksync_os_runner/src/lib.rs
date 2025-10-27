@@ -86,6 +86,17 @@ pub fn run_and_get_effective_cycles(
     non_determinism_source: impl NonDeterminismCSRSource<VectorMemoryImpl>,
 ) -> ([u32; 8], Option<u64>) {
     println!("ZK RISC-V simulator is starting");
+    println!("Requested cycles limit: {}", cycles);
+
+    // Log warning if cycles seems unusually large
+    if cycles > (1 << 32) {
+        let cycles_log2 = (cycles as f64).log2() as u32;
+        eprintln!("⚠️  WARNING: Very large cycle limit requested!");
+        eprintln!("⚠️  Cycles: {} (1 << {})", cycles, cycles_log2);
+        eprintln!("⚠️  This may cause excessive memory allocation.");
+    }
+
+    println!("Loading binary from {:?}", img_path);
 
     // Check that the bin file is present and readable.
     let mut file = std::fs::File::open(img_path.clone())
