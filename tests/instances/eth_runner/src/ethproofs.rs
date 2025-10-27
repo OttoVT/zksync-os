@@ -14,11 +14,11 @@ use alloy_primitives::U256;
 use alloy_rlp::Encodable;
 use alloy_rpc_types_eth::Withdrawal;
 use anyhow::Context;
-use anyhow::Ok;
 use anyhow::Result;
 use forward_system::run::output::map_tx_results;
 use rig::log::info;
 use rig::*;
+use std::env;
 use std::fs::{self, File};
 use std::io::BufReader;
 use std::thread::sleep;
@@ -35,6 +35,7 @@ fn eth_run(
     block_hashes: Vec<U256>,
     witness: alloy_rpc_types_debug::ExecutionWitness,
     withdrawals_encoding: Vec<u8>,
+    withness_output_dir: std::path::PathBuf,
 ) -> anyhow::Result<()> {
     chain.set_last_block_number(block_number - 1);
 
@@ -43,7 +44,7 @@ fn eth_run(
     let witness_output_dir = {
         let mut suffix = block_number.to_string();
         suffix.push_str("_witness");
-        std::path::PathBuf::from(&suffix)
+        withness_output_dir.join(std::path::PathBuf::from(&suffix))
     };
     let _result_keeper = chain.run_eth_block::<true>(
         transactions,
@@ -57,7 +58,11 @@ fn eth_run(
     Ok(())
 }
 
-pub fn ethproofs_run(block_number: u64, reth_endpoint: &str) -> anyhow::Result<()> {
+pub fn ethproofs_run(
+    block_number: u64,
+    reth_endpoint: &str,
+    withness_output_dir: std::path::PathBuf,
+) -> anyhow::Result<()> {
     // Fetch data from RPC endpoints
     let block = rpc::get_block(reth_endpoint, block_number)
         .context(format!("Failed to fetch block for {block_number}"))?;
@@ -110,6 +115,7 @@ pub fn ethproofs_run(block_number: u64, reth_endpoint: &str) -> anyhow::Result<(
         block_hashes,
         witness,
         withdrawals_encoding,
+        withness_output_dir,
     )
 }
 
@@ -119,13 +125,24 @@ const CONFIRMATIONS: u64 = 2;
 pub fn ethproofs_live_run(reth_endpoint: &str) -> anyhow::Result<()> {
     let mut next = rpc::get_block_number(reth_endpoint)?.saturating_sub(CONFIRMATIONS);
 
-    ethproofs_run(next, reth_endpoint)?;
+    let witness_output_dir = match env::current_dir() {
+        Ok(path) => {
+            println!("Current directory: {}", path.display());
+            path
+        }
+        Err(e) => {
+            eprintln!("Error getting current directory: {}", e);
+            panic!("cannot get current directory");
+        }
+    };
+
+    ethproofs_run(next, reth_endpoint, witness_output_dir.clone())?;
 
     loop {
         let head = rpc::get_block_number(reth_endpoint)?.saturating_sub(CONFIRMATIONS);
         if head > next {
             for n in (next + 1)..=head {
-                ethproofs_run(n, reth_endpoint)?;
+                ethproofs_run(n, reth_endpoint, witness_output_dir.clone())?;
             }
             next = head;
         } else {
