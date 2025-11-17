@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  # Proof Server - Runs with GPU access
+  proof-server:
+    image: airbender-server:latest
+    container_name: airbender-server
+    ports:
+      - "50051:50051"
+    volumes:
+      # Mount directory containing the binary to prove
+      - ./data/binary:/app/binary
+      # Mount directory for output proofs
+      - ./data/output:/app/output
+    environment:
+      - BINARY_PATH=/app/binary/app.bin
+      - LISTEN_ADDR=0.0.0.0:50051
+      - RUST_LOG=info
+      - RUST_MIN_STACK=267108864
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped
+    networks:
+      - proof-network
+
+  # Proof Client - Connects to server to request proofs
+  # Note: This is configured to run manually, not as a persistent service
+  # Use: docker compose run proof-client <args>
+  proof-client:
+    image: airbender-client:latest
+    container_name: airbender-client
+    volumes:
+      # Mount directory with input data
+      - ./data/input:/app/input
+      # Mount directory for output proofs
+      - ./data/output:/app/output
+      # Mount directory with binary
+      - ./data/binary:/app/binary
+    environment:
+      - SERVER_ADDR=proof-server:50051
+      - RUST_LOG=info
+    depends_on:
+      - proof-server
+    networks:
+      - proof-network
+    profiles:
+      - manual  # Don't start automatically with 'docker compose up'
+
+networks:
+  proof-network:
+    driver: bridge

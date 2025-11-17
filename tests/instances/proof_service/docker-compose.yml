@@ -1,0 +1,70 @@
+version: '3.8'
+
+services:
+  # Proof server with GPU support
+  proof-server:
+    build:
+      context: ../../..  # Build from zksync-os root
+      dockerfile: tests/instances/proof_service/docker/Dockerfile.server
+    container_name: proof-server
+    ports:
+      - "50051:50051"
+    volumes:
+      # Mount directory containing the binary
+      - ./data/binary:/app/binary:ro
+      # Optional: Mount output directory for logs
+      - ./data/server_output:/app/output
+    environment:
+      - BINARY_PATH=/app/binary/app.bin
+      - LISTEN_ADDR=0.0.0.0:50051
+      - RUST_LOG=info
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    networks:
+      - proof-network
+    restart: unless-stopped
+
+  # Proof client
+  proof-client:
+    build:
+      context: ../../..  # Build from zksync-os root
+      dockerfile: tests/instances/proof_service/docker/Dockerfile.client
+    container_name: proof-client
+    volumes:
+      # Mount binary directory
+      - ./data/binary:/app/binary:ro
+      # Mount input directory containing witness data
+      - ./data/input:/app/input:ro
+      # Mount output directory for proofs
+      - ./data/output:/app/output
+    environment:
+      - RUST_LOG=info
+    # Client depends on server being ready
+    depends_on:
+      - proof-server
+    networks:
+      - proof-network
+    # Override command - adjust paths as needed
+    command: >
+      --binary /app/binary/app.bin
+      --input /app/input/witness.bin
+      --output-dir /app/output
+      --server http://proof-server:50051
+    # Client runs once and exits, don't restart
+    restart: "no"
+    profiles:
+      - client  # Only start client when explicitly requested
+
+networks:
+  proof-network:
+    driver: bridge
+
+volumes:
+  binary-data:
+  input-data:
+  output-data:

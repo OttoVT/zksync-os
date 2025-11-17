@@ -1,0 +1,20 @@
+# Data directories
+data/
+*.bin
+*.dat
+
+# Rust build artifacts
+target/
+Cargo.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Docker
+.docker/
+
+# Logs
+*.log

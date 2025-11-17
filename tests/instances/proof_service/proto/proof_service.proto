@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package proof_service;
+
+// Request to generate a proof
+message ProofRequest {
+    // Binary data for the prover
+    bytes binary_data = 1;
+    // Witness data for proof generation
+    bytes witness_data = 2;
+}
+
+// Status update during proof generation
+message ProofStatus {
+    // Current stage of proof generation
+    string stage = 1;
+    // Progress percentage (0-100)
+    uint32 progress = 2;
+    // Additional message
+    string message = 3;
+}
+
+// Response containing the generated proof
+message ProofResponse {
+    // Serialized proof data (raw bytes)
+    bytes proof_data = 1;
+    // Total time taken for proof generation (in milliseconds)
+    uint64 total_time_ms = 2;
+    // Number of cycles
+    uint64 cycles = 3;
+    // Proof size in bytes
+    uint64 proof_size_bytes = 4;
+    // Error message if proof generation failed
+    string error = 5;
+}
+
+service ProofService {
+    // Generate a proof with bidirectional streaming for status updates
+    rpc GenerateProof(stream ProofRequest) returns (stream ProofResponse);
+
+    // Simple unary RPC for single proof generation with status updates
+    rpc GenerateProofUnary(ProofRequest) returns (stream ProofResponse);
+}

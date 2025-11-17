@@ -1,0 +1,49 @@
+# Multi-stage build for proof client
+
+# Stage 1: Builder
+FROM rust:1.83-slim as builder
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    git \
+    build-essential \
+    pkg-config \
+    libssl-dev \
+    protobuf-compiler \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install matching nightly version (required for edition2024)
+RUN rustup install nightly-2025-09-03 && \
+    rustup default nightly-2025-09-03
+
+WORKDIR /build
+
+# Copy workspace files
+COPY . .
+
+# Build the client (from workspace root to resolve all dependencies)
+RUN cargo build --release -p proof_client
+
+# Stage 2: Runtime
+FROM debian:bookworm-slim
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create app directory
+WORKDIR /app
+
+# Copy the binary from builder
+COPY --from=builder /build/target/release/proof_client /app/proof_client
+
+# Create directories for input and output
+RUN mkdir -p /app/input /app/output /app/binary
+
+# Set default environment variables
+ENV RUST_LOG=info
+
+# Run the client
+ENTRYPOINT ["/app/proof_client"]

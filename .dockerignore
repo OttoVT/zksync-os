@@ -1,5 +1,7 @@
 *
 !Cargo.toml
+!Cargo.lock
+!.cargo
 
 !basic_bootloader
 !basic_system
@@ -11,6 +13,19 @@
 !supporting_crates
 !system_hooks
 !zk_ee
+!zksync_os_runner
+!oracle_provider
+!forward_system
+!callable_oracles
+!api
+!tests
+
+# Allow pre-built binaries for Docker images
+!target/release/proof_server
+!target/release/proof_client
 
 !zksync_os
 zksync_os/target
+tests/forge
+tests/evm_tester
+tests/contracts_wasm

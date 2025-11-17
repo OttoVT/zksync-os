@@ -33,6 +33,8 @@ members = [
     "tests/instances/system_hooks",
     "tests/binary_checker",
     "zksync_os_runner",
+    "tests/instances/proof_service/client",
+    "tests/instances/proof_service/server",
 ]
 
 default-members = [

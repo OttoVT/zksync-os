@@ -1,0 +1,5 @@
+[build]
+rustflags = ["-Awarnings"]
+
+[env]
+RUST_MIN_STACK = "267108864"

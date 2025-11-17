@@ -1,0 +1,92 @@
+# Multi-stage build for proof server with GPU support
+
+# Stage 1: Builder - Build stage with full CUDA development environment
+FROM nvidia/cuda:12.9.1-devel-ubuntu24.04 as builder
+
+# Install build dependencies matching host
+RUN apt-get update && apt-get install -y \
+    curl \
+    git \
+    build-essential \
+    pkg-config \
+    libssl-dev \
+    wget \
+    gcc-13 \
+    g++-13 \
+    libc6-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set GCC 13 as default
+RUN update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-13 100 && \
+    update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-13 100
+
+# Install CMake 3.28.3
+RUN wget -q https://github.com/Kitware/CMake/releases/download/v3.28.3/cmake-3.28.3-linux-x86_64.sh && \
+    sh cmake-3.28.3-linux-x86_64.sh --skip-license --prefix=/usr/local && \
+    rm cmake-3.28.3-linux-x86_64.sh
+
+# Install Rust
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+# Install matching nightly version
+RUN rustup install nightly-2025-09-03 && \
+    rustup default nightly-2025-09-03
+
+# Set CUDA environment variables
+ENV CUDA_HOME=/usr/local/cuda-12.9
+ENV PATH=/usr/local/cuda-12.9/bin:${PATH}
+ENV LD_LIBRARY_PATH=/usr/local/cuda-12.9/lib64:${LD_LIBRARY_PATH}
+ENV CMAKE_CUDA_ARCHITECTURES=89
+ENV CUDA_COMPUTE_CAP=89
+ENV CUDAARCHS=89
+ENV TORCH_CUDA_ARCH_LIST="8.9"
+
+WORKDIR /build
+
+# Copy workspace files
+COPY . .
+
+# Initialize git submodules if needed
+RUN git init && git config --global --add safe.directory /build || true
+
+# Set CUDA architecture flags for the build
+ENV RUSTFLAGS="-C target-cpu=native"
+ENV CUDA_NVCC_FLAGS="--generate-code arch=compute_89,code=sm_89"
+
+# Build the server (from workspace root to resolve all dependencies)
+RUN cargo build --release -p proof_server
+
+# Stage 2: Runtime - Execution layer with CUDA runtime only
+FROM nvidia/cuda:12.9.1-runtime-ubuntu24.04
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    libssl3 \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set CUDA environment variables
+ENV CUDA_HOME=/usr/local/cuda-12.9
+ENV PATH=/usr/local/cuda-12.9/bin:${PATH}
+ENV LD_LIBRARY_PATH=/usr/local/cuda-12.9/lib64:${LD_LIBRARY_PATH}
+
+# Create app directory
+WORKDIR /app
+
+# Copy the binary from builder
+COPY --from=builder /build/target/release/proof_server /app/proof_server
+
+# Create directories for binary and output
+RUN mkdir -p /app/binary /app/output
+
+# Expose gRPC port
+EXPOSE 50051
+
+# Set default environment variables
+ENV BINARY_PATH=/app/binary/app.bin
+ENV LISTEN_ADDR=0.0.0.0:50051
+ENV RUST_LOG=info
+
+# Run the server
+CMD ["/app/proof_server"]

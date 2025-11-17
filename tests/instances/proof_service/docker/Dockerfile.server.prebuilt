@@ -1,0 +1,36 @@
+# Runtime-only Docker image for pre-built proof server
+# Build the binary on the host first with: cargo build --release -p proof_server
+
+FROM nvidia/cuda:12.9.1-runtime-ubuntu24.04
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    libssl3 \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set CUDA environment variables
+ENV CUDA_HOME=/usr/local/cuda-12.9
+ENV PATH=/usr/local/cuda-12.9/bin:${PATH}
+ENV LD_LIBRARY_PATH=/usr/local/cuda-12.9/lib64:${LD_LIBRARY_PATH}
+
+# Create app directory
+WORKDIR /app
+
+# Copy the pre-built binary from host
+COPY target/release/proof_server /app/proof_server
+
+# Create directories for binary and output
+RUN mkdir -p /app/binary /app/output
+
+# Expose gRPC port
+EXPOSE 50051
+
+# Set default environment variables
+ENV BINARY_PATH=/app/binary/app.bin
+ENV LISTEN_ADDR=0.0.0.0:50051
+ENV RUST_LOG=info
+ENV RUST_MIN_STACK=267108864
+
+# Run the server
+CMD ["/app/proof_server"]
