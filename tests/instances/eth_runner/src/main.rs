@@ -86,6 +86,8 @@ enum Command {
         block_number: u64,
         #[arg(long)]
         reth_endpoint: String,
+        #[arg(long)]
+        witness_output_dir: String,
     },
     // Prove ethereum blocks for Ethproofs live
     EthproofsLiveRun {
@@ -154,8 +156,9 @@ fn main() -> anyhow::Result<()> {
         Command::EthproofsRun {
             block_number,
             reth_endpoint,
+            witness_output_dir,
         } => {
-            ethproofs::ethproofs_run(block_number, &reth_endpoint, true, None)?;
+            ethproofs::ethproofs_run(block_number, &reth_endpoint, Some(witness_output_dir), None)?;
             Ok(())
         }
         Command::EthproofsLiveRun { reth_endpoint } => ethproofs_live_run(&reth_endpoint),

@@ -22,17 +22,18 @@ fn eth_run(
     block_hashes: Vec<U256>,
     witness: alloy_rpc_types_debug::ExecutionWitness,
     withdrawals_encoding: Vec<u8>,
-    write_to_file: bool,
+    witness_output_dir: Option<String>,
     app: Option<String>,
 ) -> anyhow::Result<Vec<u32>> {
     chain.set_last_block_number(block_number - 1);
 
     chain.set_block_hashes(block_hashes.try_into().unwrap());
 
-    let witness_output_dir = if write_to_file {
+    let witness_output_dir = if let Some(dir) = witness_output_dir {
         let mut suffix = block_number.to_string();
         suffix.push_str("_witness");
-        Some(std::path::PathBuf::from(&suffix))
+        
+        Some(std::path::PathBuf::from(&dir).join(&suffix))
     } else {
         None
     };
@@ -55,7 +56,7 @@ fn eth_run(
 pub fn ethproofs_run(
     block_number: u64,
     reth_endpoint: &str,
-    write_to_file: bool,
+    witness_output_dir: Option<String>,
     app: Option<String>,
 ) -> anyhow::Result<(Vec<u32>, f64)> {
     // Fetch data from RPC endpoints
@@ -108,7 +109,7 @@ pub fn ethproofs_run(
         block_hashes,
         witness,
         withdrawals_encoding,
-        write_to_file,
+        witness_output_dir,
         app,
     )?;
     // compute time taken
@@ -123,13 +124,13 @@ const CONFIRMATIONS: u64 = 2;
 pub fn ethproofs_live_run(reth_endpoint: &str) -> anyhow::Result<()> {
     let mut next = rpc::get_block_number(reth_endpoint)?.saturating_sub(CONFIRMATIONS);
 
-    ethproofs_run(next, reth_endpoint, true, None)?;
+    ethproofs_run(next, reth_endpoint, None, None)?;
 
     loop {
         let head = rpc::get_block_number(reth_endpoint)?.saturating_sub(CONFIRMATIONS);
         if head > next {
             for n in (next + 1)..=head {
-                ethproofs_run(n, reth_endpoint, true, None)?;
+                ethproofs_run(n, reth_endpoint, None, None)?;
             }
             next = head;
         } else {
@@ -176,7 +177,7 @@ pub fn ethproofs_with_proofs(
     let mut gpu_state = gpu_state.as_mut();
 
     let mut next = 0;
-
+    let cur_dir = std::env::current_dir().expect("must get current dir");
     loop {
         let head = rpc::get_block_number(reth_endpoint)?;
         let head = connector.select_block(head, block_selector);
@@ -185,7 +186,7 @@ pub fn ethproofs_with_proofs(
             let (witness, duration) = ethproofs_run(
                 head,
                 reth_endpoint,
-                false,
+                Some(cur_dir.to_str().unwrap().to_string()),
                 None, //Some(bin_path_without_bin.clone()),
             )?;
             let mut total_proof_time = Some(duration);
@@ -222,12 +223,20 @@ pub fn ethproofs_with_proofs(
                 .context("Failed to serialize the program proof")?;
             let encoded_proof = base64::engine::general_purpose::STANDARD.encode(&serialized_proof);
 
-            connector.send_proof(
+            // TODO: return back
+            // Just disabled for testing purposes
+            /* connector.send_proof(
                 head,
                 &encoded_proof,
                 total_proof_time.unwrap(),
                 cycles as u64,
-            )?;
+            )?; */
+            println!(
+                "Generated proof for block {} in {}s, proof size: {} bytes",
+                head,
+                total_proof_time.unwrap(),
+                encoded_proof.len()
+            );
 
             next = head;
         } else {
